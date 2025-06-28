@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mermaid Ocean Adventure</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(to bottom, #87CEEB 0%, #4682B4 50%, #191970 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        canvas {
+            border: 3px solid #2E8B57;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            text-align: center;
+            font-size: 14px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <div>Use ARROW KEYS to move the mermaid</div>
+        <div>Avoid sharks, jellyfish, and seagulls!</div>
+        <div>Collect all 10 unique seashells to win!</div>
+    </div>
+    
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Load mermaid image
+        const mermaidImg = new Image();
+        mermaidImg.crossOrigin = "anonymous";
+        mermaidImg.src = 'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/mermid-ofXDQiRy1l3QLdWao32bETPHtEKRJY.png';
+        let mermaidImageLoaded = false;
+
+        mermaidImg.onload = function() {
+            mermaidImageLoaded = true;
+        };
+
+        mermaidImg.onerror = function() {
+            mermaidImageLoaded = false;
+        };
+
+        // Load seashell images with proper cloud URLs
+        const seashellImages = [];
+        const seashellUrls = [
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell1-kOdag3ItYr3Kwtl0jKxX4G00eycPkR.png',  // Pink Scallop
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell2-pXPdCGe2xxf813nHvOF30VmJvWyR7e.png',  // Green Conch
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell3-P5TmRVUNLAc5H3TKe0z8gXMBT4HvDi.png',  // Blue Spiral
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell4-yEluKksTKGCnWFuqnETCaelrmrMrD4.png',  // Purple Fan
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell5-aQnMkubu3qKMubjOM2JpvuvvcU3dZH.png',  // Golden Star
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell6-kjM81tukDQu0wcH2i37SvqnPowSWxc.png',  // Coral Oval
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell7-a2fvkEnDj3cIOhZpFchlmaptlOvElp.png',  // Teal Triangle
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell8-NYA0XlUKeIj17xXQ8YSDWNViuyZH8a.png',  // Orchid Heart
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell9-hpD8v27SzpxLMMJRZojJSwdhd7baOb.png',  // Pearl Diamond
+            'https://hebbkx1anhila5yf.public.blob.vercel-storage.com/seashell10-s2vo23tEtj7YA9tm4jLaEvtJWY0Y5A.png'   // Royal Crown
+        ];
+
+        seashellUrls.forEach((url, index) => {
+            const img = new Image();
+            img.crossOrigin = "anonymous";
+            img.src = url;
+            img.onload = function() {
+                console.log(`Seashell ${index + 1} loaded successfully`);
+            };
+            img.onerror = function() {
+                console.log(`Seashell ${index + 1} failed to load`);
+            };
+            seashellImages.push(img);
+        });
+
+        // Game state
+        let gameState = 'difficultySelect';
+        let difficulty = 'MEDIUM';
+        let level = 1;
+        let shellsCollected = 0;
+        const maxShells = 10;
+
+        // Difficulty settings
+        const difficultySettings = {
+            'EASY': { speedMultiplier: 0.7, enemyMultiplier: 0.8, hearts: 5 },
+            'MEDIUM': { speedMultiplier: 1.0, enemyMultiplier: 1.0, hearts: 3 },
+            'HARD': { speedMultiplier: 1.4, enemyMultiplier: 1.3, hearts: 2 },
+            'EXTREME': { speedMultiplier: 1.8, enemyMultiplier: 1.6, hearts: 1 }
+        };
+
+        // Player (Mermaid)
+        const player = {
+            x: 50,
+            y: 300,
+            width: 50,
+            height: 70,
+            speed: 4,
+            hearts: 3,
+            invulnerable: false,
+            invulnerabilityTime: 0,
+            rotation: 0,
+            targetRotation: 0,
+            isMovingRight: false,
+            isMovingLeft: false
+        };
+
+        // Seashell types
+        const seashellTypes = [
+            { color: '#FFB6C1', secondColor: '#FF69B4', name: 'Pink Scallop', imageIndex: 0 },
+            { color: '#98FB98', secondColor: '#32CD32', name: 'Green Conch', imageIndex: 1 },
+            { color: '#87CEEB', secondColor: '#4169E1', name: 'Blue Spiral', imageIndex: 2 },
+            { color: '#DDA0DD', secondColor: '#9370DB', name: 'Purple Fan', imageIndex: 3 },
+            { color: '#F0E68C', secondColor: '#FFD700', name: 'Golden Star', imageIndex: 4 },
+            { color: '#FFA07A', secondColor: '#FF4500', name: 'Coral Oval', imageIndex: 5 },
+            { color: '#20B2AA', secondColor: '#008B8B', name: 'Teal Triangle', imageIndex: 6 },
+            { color: '#DA70D6', secondColor: '#BA55D3', name: 'Orchid Heart', imageIndex: 7 },
+            { color: '#F5DEB3', secondColor: '#D2B48C', name: 'Pearl Diamond', imageIndex: 8 },
+            { color: '#FF1493', secondColor: '#DC143C', name: 'Royal Crown', imageIndex: 9 }
+        ];
+
+        // Collected shells array
+        let collectedShells = [];
+
+        // Game objects arrays
+        let enemies = [];
+        let seashells = [];
+        let seaweed = [];
+        let bubbles = [];
+
+        // Input handling
+        const keys = {};
+        document.addEventListener('keydown', (e) => keys[e.key] = true);
+        document.addEventListener('keyup', (e) => keys[e.key] = false);
+
+        // Initialize seaweed
+        function initSeaweed() {
+            seaweed = [];
+            for (let i = 0; i < 15; i++) {
+                seaweed.push({
+                    x: Math.random() * canvas.width,
+                    y: canvas.height - 80 + Math.random() * 30,
+                    height: 40 + Math.random() * 40,
+                    sway: Math.random() * 0.1
+                });
+            }
+        }
+
+        // Initialize level with progressive difficulty
+        function initLevel() {
+            enemies = [];
+            seashells = [];
+            bubbles = [];
+            
+            // Add seashell for this level (unique type)
+            const shellType = seashellTypes[level - 1];
+            seashells.push({
+                x: canvas.width - 80,
+                y: 200 + Math.random() * 200,
+                width: 35,
+                height: 30,
+                collected: false,
+                type: shellType,
+                pulse: 0
+            });
+
+            // Progressive difficulty based on level and selected difficulty
+            const settings = difficultySettings[difficulty];
+            const baseEnemyCount = 2;
+            const enemyCount = Math.min((baseEnemyCount + level) * settings.enemyMultiplier, 15);
+            const speedMultiplier = (1 + (level - 1) * 0.2) * settings.speedMultiplier;
+            
+            for (let i = 0; i < enemyCount; i++) {
+                const enemyType = Math.random();
+                if (enemyType < 0.4) {
+                    // Shark - gets faster and more numerous
+                    enemies.push({
+                        type: 'shark',
+                        x: canvas.width + Math.random() * 300,
+                        y: 150 + Math.random() * 300,
+                        width: 60,
+                        height: 30,
+                        speed: (1.5 + Math.random() * 2) * speedMultiplier,
+                        direction: -1
+                    });
+                } else if (enemyType < 0.7) {
+                    // Jellyfish - more erratic movement at higher levels
+                    enemies.push({
+                        type: 'jellyfish',
+                        x: canvas.width + Math.random() * 400,
+                        y: 100 + Math.random() * 350,
+                        width: 40,
+                        height: 50,
+                        speed: (0.8 + Math.random() * 1.2) * speedMultiplier,
+                        direction: -1,
+                        bob: Math.random() * Math.PI * 2,
+                        bobSpeed: 0.05 + level * 0.01
+                    });
+                } else {
+                    // Seagull - dive attacks at higher levels
+                    enemies.push({
+                        type: 'seagull',
+                        x: canvas.width + Math.random() * 500,
+                        y: 20 + Math.random() * 80,
+                        width: 35,
+                        height: 25,
+                        speed: (2 + Math.random() * 2) * speedMultiplier,
+                        direction: -1,
+                        flap: 0,
+                        diving: level > 2 && Math.random() < 0.3,
+                        diveSpeed: 0
+                    });
+                }
+            }
+
+            // More bubbles at higher levels
+            const bubbleCount = 15 + level * 2;
+            for (let i = 0; i < bubbleCount; i++) {
+                bubbles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    radius: 2 + Math.random() * 8,
+                    speed: (0.5 + Math.random() * 1.5) * (1 + level * 0.1)
+                });
+            }
+        }
+
+        // Draw functions
+        function drawMermaid() {
+            ctx.save();
+            
+            if (player.invulnerable && Math.floor(Date.now() / 100) % 2) {
+                ctx.globalAlpha = 0.5;
+            }
+            
+            // Apply rotation
+            ctx.translate(player.x + player.width/2, player.y + player.height/2);
+            ctx.rotate(player.rotation * Math.PI / 180);
+            
+            // Draw the mermaid image if loaded, otherwise use fallback
+            if (mermaidImageLoaded && mermaidImg.complete) {
+                ctx.drawImage(mermaidImg, -player.width/2, -player.height/2, player.width, player.height);
+            } else {
+                // Fallback mermaid drawing (adjusted for center origin)
+                ctx.fillStyle = '#2E8B57';
+                ctx.beginPath();
+                ctx.ellipse(-15, 15, 15, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#FDBCB4';
+                ctx.beginPath();
+                ctx.ellipse(-5, -5, 12, 20, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.arc(-5, -20, 12, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#DC143C';
+                ctx.beginPath();
+                ctx.arc(-5, -25, 15, 0, Math.PI);
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+
+        function drawDifficultySelect() {
+            // Background
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Title
+            ctx.fillStyle = '#FFD700';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('MERMAID OCEAN ADVENTURE', canvas.width / 2, 120);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '32px Arial';
+            ctx.fillText('Choose Your Difficulty', canvas.width / 2, 180);
+            
+            // Difficulty options
+            const difficulties = ['EASY', 'MEDIUM', 'HARD', 'EXTREME'];
+            const colors = ['#90EE90', '#FFD700', '#FF6347', '#FF1493'];
+            const descriptions = [
+                '5 Hearts - Slower Enemies',
+                '3 Hearts - Normal Speed',
+                '2 Hearts - Fast Enemies',
+                '1 Heart - Extreme Speed!'
+            ];
+            
+            for (let i = 0; i < difficulties.length; i++) {
+                const y = 250 + i * 80;
+                const isSelected = difficulties[i] === difficulty;
+                
+                // Highlight selected difficulty
+                if (isSelected) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                    ctx.fillRect(canvas.width / 2 - 200, y - 35, 400, 60);
+                }
+                
+                ctx.fillStyle = colors[i];
+                ctx.font = '28px Arial';
+                ctx.fillText(difficulties[i], canvas.width / 2, y);
+                
+                ctx.fillStyle = 'lightgray';
+                ctx.font = '16px Arial';
+                ctx.fillText(descriptions[i], canvas.width / 2, y + 25);
+            }
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText('Use UP/DOWN arrows to select, ENTER to start', canvas.width / 2, 580);
+            ctx.textAlign = 'left';
+        }
+
+        function drawShark(enemy) {
+            ctx.fillStyle = '#708090';
+            // Body
+            ctx.beginPath();
+            ctx.ellipse(enemy.x + 30, enemy.y + 15, 25, 12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Head
+            ctx.beginPath();
+            ctx.moveTo(enemy.x, enemy.y + 15);
+            ctx.lineTo(enemy.x + 20, enemy.y + 5);
+            ctx.lineTo(enemy.x + 20, enemy.y + 25);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Fin
+            ctx.beginPath();
+            ctx.moveTo(enemy.x + 50, enemy.y + 15);
+            ctx.lineTo(enemy.x + 60, enemy.y + 5);
+            ctx.lineTo(enemy.x + 60, enemy.y + 25);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Teeth
+            ctx.fillStyle = 'white';
+            for (let i = 0; i < 5; i++) {
+                ctx.beginPath();
+                ctx.moveTo(enemy.x + 5 + i * 3, enemy.y + 12);
+                ctx.lineTo(enemy.x + 6 + i * 3, enemy.y + 18);
+                ctx.lineTo(enemy.x + 7 + i * 3, enemy.y + 12);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Eyes
+            ctx.fillStyle = 'black';
+            ctx.beginPath();
+            ctx.arc(enemy.x + 12, enemy.y + 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(enemy.x + 13, enemy.y + 9, 1, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawJellyfish(enemy) {
+    // Bell (dome shape)
+    ctx.fillStyle = 'rgba(255, 192, 203, 0.8)';
+    ctx.beginPath();
+    ctx.arc(enemy.x + 20, enemy.y + 15, 18, Math.PI, 0);
+    ctx.fill();
+    
+    // Bell outline for better definition
+    ctx.strokeStyle = 'rgba(255, 192, 203, 1)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    
+    // Tentacles - now properly connected to the bell edge
+    ctx.strokeStyle = 'rgba(255, 192, 203, 0.8)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 6; i++) {
+        ctx.beginPath();
+        // Start tentacles from the bottom edge of the bell
+        const tentacleStartX = enemy.x + 8 + i * 4;
+        const tentacleStartY = enemy.y + 15; // At the bell's bottom edge
+        ctx.moveTo(tentacleStartX, tentacleStartY);
+        
+        // Add wavy motion to tentacles
+        const wave = Math.sin(Date.now() * 0.01 + i) * 3;
+        ctx.lineTo(tentacleStartX + wave, tentacleStartY + 25);
+        ctx.stroke();
+    }
+    
+    // Add some spots on the bell for detail
+    ctx.fillStyle = 'rgba(255, 182, 193, 0.6)';
+    ctx.beginPath();
+    ctx.arc(enemy.x + 15, enemy.y + 10, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(enemy.x + 25, enemy.y + 8, 2, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+        function drawSeagull(enemy) {
+            ctx.fillStyle = 'white';
+            // Body
+            ctx.beginPath();
+            ctx.ellipse(enemy.x + 15, enemy.y + 12, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Head
+            ctx.beginPath();
+            ctx.arc(enemy.x + 5, enemy.y + 10, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Beak
+            ctx.fillStyle = 'orange';
+            ctx.beginPath();
+            ctx.moveTo(enemy.x - 2, enemy.y + 10);
+            ctx.lineTo(enemy.x + 3, enemy.y + 12);
+            ctx.lineTo(enemy.x + 3, enemy.y + 8);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Wings
+            ctx.fillStyle = 'lightgray';
+            const wingFlap = Math.sin(enemy.flap) * 5;
+            ctx.beginPath();
+            ctx.ellipse(enemy.x + 15, enemy.y + 8 + wingFlap, 8, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(enemy.x + 15, enemy.y + 16 - wingFlap, 8, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawSeashell(shell) {
+            if (shell.collected) return;
+            
+            shell.pulse += 0.1;
+            const pulseSize = 2 + Math.sin(shell.pulse) * 2;
+            
+            ctx.save();
+            ctx.translate(shell.x + shell.width/2, shell.y + shell.height/2);
+            ctx.scale(1 + pulseSize * 0.1, 1 + pulseSize * 0.1);
+            
+            // Try to use the actual seashell image first
+            const shellImg = seashellImages[shell.type.imageIndex];
+            if (shellImg && shellImg.complete) {
+                ctx.drawImage(shellImg, -shell.width/2, -shell.height/2, shell.width, shell.height);
+            } else {
+                // Fallback to drawn shell
+                ctx.fillStyle = shell.type.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, shell.width/2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = shell.type.secondColor;
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            ctx.restore();
+        }
+
+        function drawEnvironment() {
+            // Ocean background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(0.3, '#4682B4');
+            gradient.addColorStop(1, '#191970');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Surface line
+            ctx.strokeStyle = '#87CEEB';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, 100);
+            ctx.lineTo(canvas.width, 100);
+            ctx.stroke();
+            
+            // Sea floor
+            ctx.fillStyle = '#F4A460';
+            ctx.fillRect(0, canvas.height - 60, canvas.width, 60);
+            
+            // Seaweed
+            seaweed.forEach(weed => {
+                ctx.strokeStyle = '#228B22';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(weed.x, canvas.height - 60);
+                const sway = Math.sin(Date.now() * weed.sway * 0.001) * 10;
+                ctx.lineTo(weed.x + sway, canvas.height - 60 - weed.height);
+                ctx.stroke();
+            });
+            
+            // Bubbles
+            bubbles.forEach(bubble => {
+                ctx.fillStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(Date.now() * 0.005) * 0.2})`;
+                ctx.beginPath();
+                ctx.arc(bubble.x, bubble.y, bubble.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawUI() {
+            // Hearts
+            ctx.fillStyle = 'red';
+            for (let i = 0; i < player.hearts; i++) {
+                ctx.beginPath();
+                ctx.arc(30 + i * 40, 30, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(45 + i * 40, 30, 12, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(18 + i * 40, 35);
+                ctx.lineTo(57 + i * 40, 35);
+                ctx.lineTo(37.5 + i * 40, 55);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Level and difficulty info
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`Level: ${level}`, canvas.width - 150, 30);
+            ctx.fillText(`${difficulty}`, canvas.width - 150, 55);
+            
+            // Collected shells display
+            ctx.fillText('Collected Shells:', 200, 30);
+            for (let i = 0; i < collectedShells.length; i++) {
+                const shellImg = seashellImages[collectedShells[i].imageIndex];
+                if (shellImg && shellImg.complete) {
+                    ctx.drawImage(shellImg, 200 + i * 35, 45, 25, 25);
+                } else {
+                    // Fallback circle
+                    ctx.fillStyle = collectedShells[i].color;
+                    ctx.beginPath();
+                    ctx.arc(212 + i * 35, 57, 12, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+            
+            // Progress
+            ctx.fillText(`${shellsCollected}/${maxShells}`, 200, 85);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'red';
+            ctx.font = '42px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER!', canvas.width / 2, canvas.height / 2 - 100);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText(`You collected ${shellsCollected} out of ${maxShells} seashells`, canvas.width / 2, canvas.height / 2 - 60);
+            ctx.fillText(`Difficulty: ${difficulty}`, canvas.width / 2, canvas.height / 2 - 35);
+            
+            // Show collected shells with better spacing
+            if (collectedShells.length > 0) {
+                ctx.fillText('Your Collection:', canvas.width / 2, canvas.height / 2 - 10);
+                for (let i = 0; i < collectedShells.length; i++) {
+                    const shellImg = seashellImages[collectedShells[i].imageIndex];
+                    if (shellImg && shellImg.complete) {
+                        // More spacing between shells
+                        ctx.drawImage(shellImg, canvas.width / 2 - (collectedShells.length * 20) + i * 40, canvas.height / 2 + 20, 25, 25);
+                    }
+                }
+            }
+            
+            ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 80);
+            ctx.textAlign = 'left';
+        }
+
+        function drawWin() {
+            ctx.fillStyle = 'rgba(0, 100, 0, 0.8)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = 'gold';
+            ctx.font = '42px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('CONGRATULATIONS!', canvas.width / 2, 100);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText('You collected all 10 magical seashells!', canvas.width / 2, 140);
+            ctx.fillText(`Difficulty: ${difficulty}`, canvas.width / 2, 160);
+            
+            // Display collected shells in a cleaner grid with more spacing
+            ctx.fillText('Your Complete Collection:', canvas.width / 2, 180);
+            
+            for (let i = 0; i < collectedShells.length; i++) {
+                const row = Math.floor(i / 5);
+                const col = i % 5;
+                const shellImg = seashellImages[collectedShells[i].imageIndex];
+                
+                // More spacing between shells
+                const shellX = canvas.width / 2 - 150 + col * 60;
+                const shellY = 220 + row * 80;
+                
+                if (shellImg && shellImg.complete) {
+                    ctx.drawImage(shellImg, shellX, shellY, 35, 35);
+                }
+                
+                // Shell names with better spacing and smaller font
+                ctx.font = '10px Arial';
+                ctx.fillStyle = 'lightgray';
+                // Center the text properly under each shell
+                const textX = shellX + 17;
+                const textY = shellY + 52;
+                ctx.textAlign = 'center';
+                ctx.fillText(collectedShells[i].name, textX, textY);
+                ctx.textAlign = 'left';
+                ctx.fillStyle = 'white';
+            }
+            
+            ctx.font = '22px Arial';
+            ctx.fillText('Press R to play again', canvas.width / 2, 420);
+            ctx.textAlign = 'left';
+        }
+
+        // Collision detection
+        function checkCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        // Update game logic
+        function update() {
+            if (gameState === 'difficultySelect') {
+                // Handle difficulty selection
+                if (keys['ArrowUp']) {
+                    keys['ArrowUp'] = false;
+                    const difficulties = ['EASY', 'MEDIUM', 'HARD', 'EXTREME'];
+                    const currentIndex = difficulties.indexOf(difficulty);
+                    difficulty = difficulties[Math.max(0, currentIndex - 1)];
+                }
+                if (keys['ArrowDown']) {
+                    keys['ArrowDown'] = false;
+                    const difficulties = ['EASY', 'MEDIUM', 'HARD', 'EXTREME'];
+                    const currentIndex = difficulties.indexOf(difficulty);
+                    difficulty = difficulties[Math.min(difficulties.length - 1, currentIndex + 1)];
+                }
+                if (keys['Enter']) {
+                    keys['Enter'] = false;
+                    gameState = 'playing';
+                    player.hearts = difficultySettings[difficulty].hearts;
+                    initLevel();
+                }
+                return;
+            }
+            
+            if (gameState !== 'playing') {
+                if (keys['r'] || keys['R']) {
+                    // Restart game
+                    gameState = 'difficultySelect';
+                    level = 1;
+                    shellsCollected = 0;
+                    collectedShells = [];
+                    player.x = 50;
+                    player.y = 300;
+                    player.invulnerable = false;
+                    player.invulnerabilityTime = 0;
+                }
+                return;
+            }
+
+            // Player movement with rotation
+            const wasMovingRight = player.isMovingRight;
+            const wasMovingLeft = player.isMovingLeft;
+
+            player.isMovingRight = keys['ArrowRight'] && player.x < canvas.width - player.width;
+            player.isMovingLeft = keys['ArrowLeft'] && player.x > 0;
+
+            // Handle rotation based on movement
+            if (player.isMovingRight && !wasMovingRight) {
+                // Started moving right - rotate 90 degrees clockwise
+                player.targetRotation = 90;
+            } else if (!player.isMovingRight && wasMovingRight && !player.isMovingLeft) {
+                // Stopped moving right - rotate back 90 degrees counterclockwise
+                player.targetRotation = 0;
+            } else if (player.isMovingLeft && !wasMovingLeft) {
+                // Started moving left - rotate 90 degrees counterclockwise from current
+                player.targetRotation = player.targetRotation - 90;
+            } else if (!player.isMovingLeft && wasMovingLeft && !player.isMovingRight) {
+                // Stopped moving left - rotate 90 degrees clockwise to recover
+                player.targetRotation = 0;
+            }
+
+            // Smooth rotation interpolation
+            const rotationSpeed = 8;
+            if (player.rotation < player.targetRotation) {
+                player.rotation = Math.min(player.rotation + rotationSpeed, player.targetRotation);
+            } else if (player.rotation > player.targetRotation) {
+                player.rotation = Math.max(player.rotation - rotationSpeed, player.targetRotation);
+            }
+
+            // Apply movement
+            if (keys['ArrowUp'] && player.y > 100) player.y -= player.speed;
+            if (keys['ArrowDown'] && player.y < canvas.height - 120) player.y += player.speed;
+            if (player.isMovingLeft) player.x -= player.speed;
+            if (player.isMovingRight) player.x += player.speed;
+
+            // Update invulnerability
+            if (player.invulnerable) {
+                player.invulnerabilityTime--;
+                if (player.invulnerabilityTime <= 0) {
+                    player.invulnerable = false;
+                }
+            }
+
+            // Update enemies
+            enemies.forEach(enemy => {
+                enemy.x += enemy.direction * enemy.speed;
+                
+                if (enemy.type === 'jellyfish') {
+                    enemy.bob += enemy.bobSpeed;
+                    enemy.y += Math.sin(enemy.bob) * 1;
+                } else if (enemy.type === 'seagull') {
+                    enemy.flap += 0.2;
+                    // Diving behavior for higher levels
+                    if (enemy.diving && enemy.y < canvas.height - 100) {
+                        enemy.diveSpeed += 0.1;
+                        enemy.y += enemy.diveSpeed;
+                    }
+                }
+                
+                // Reset enemy position when off screen
+                if (enemy.x < -100) {
+                    enemy.x = canvas.width + Math.random() * 200;
+                    if (enemy.type === 'seagull') {
+                        enemy.y = 20 + Math.random() * 80;
+                        enemy.diving = level > 2 && Math.random() < 0.3;
+                        enemy.diveSpeed = 0;
+                    } else {
+                        enemy.y = 100 + Math.random() * 350;
+                    }
+                }
+                
+                // Check collision with player
+                if (!player.invulnerable && checkCollision(player, enemy)) {
+                    player.hearts--;
+                    player.invulnerable = true;
+                    player.invulnerabilityTime = 120; // 2 seconds at 60fps
+                    
+                    if (player.hearts <= 0) {
+                        gameState = 'gameOver';
+                    }
+                }
+            });
+
+            // Update bubbles
+            bubbles.forEach(bubble => {
+                bubble.y -= bubble.speed;
+                if (bubble.y < -10) {
+                    bubble.y = canvas.height + 10;
+                    bubble.x = Math.random() * canvas.width;
+                }
+            });
+
+            // Check seashell collection
+            seashells.forEach(shell => {
+                if (!shell.collected && checkCollision(player, shell)) {
+                    shell.collected = true;
+                    shellsCollected++;
+                    collectedShells.push(shell.type);
+                    
+                    if (shellsCollected >= maxShells) {
+                        gameState = 'win';
+                    } else {
+                        level++;
+                        player.x = 50; // Reset player position
+                        initLevel();
+                    }
+                }
+            });
+        }
+
+        // Game loop
+        function gameLoop() {
+            update();
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (gameState === 'difficultySelect') {
+                drawDifficultySelect();
+            } else {
+                // Draw everything
+                drawEnvironment();
+                
+                if (gameState === 'playing') {
+                    drawMermaid();
+                    
+                    enemies.forEach(enemy => {
+                        if (enemy.type === 'shark') drawShark(enemy);
+                        else if (enemy.type === 'jellyfish') drawJellyfish(enemy);
+                        else if (enemy.type === 'seagull') drawSeagull(enemy);
+                    });
+                    
+                    seashells.forEach(drawSeashell);
+                    drawUI();
+                } else if (gameState === 'gameOver') {
+                    drawGameOver();
+                } else if (gameState === 'win') {
+                    drawWin();
+                }
+            }
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Initialize game
+        initSeaweed();
+        gameLoop();
+    </script>
+</body>
+</html>
